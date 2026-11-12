@@ -1,0 +1,25 @@
+name: Service and incident checks
+on:
+  push:
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -v
+      - run: docker compose config --quiet
+      - run: docker compose up -d --build
+      - name: Check service readiness
+        run: |
+          sleep 5
+          python scripts/check_service.py --attempts 5 --delay 2 --output logs/ci-checks.jsonl
+      - run: python scripts/summarize_checks.py logs/ci-checks.jsonl
+      - name: Inspect container state
+        if: failure()
+        run: docker compose logs --tail=100
+      - if: always()
+        run: docker compose down
